@@ -131,6 +131,9 @@
         dummy.remove();
 
         // console.log("$renderedKomponent", $renderedKomponent);
+        if(typeof userData === "undefined") {
+            var userData = null;
+        }
 
         let userId = (userData && userData.sub) ? userData.sub : null;
         let userLvl = (userData && userData.level) ? userData.level : null;
