@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Komponentor Router Example</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="../src/komponentor.js"></script>
+    <script src="../src/komponentor.router.js"></script>
+</head>
+<body>
+    <nav>
+        <a href="#home">Home</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+    </nav>
+
+    <div id="app"></div>
+
+    <script>
+        // Configure router
+        KomponentorRouter
+            .init({
+                container: '#app',
+                defaultRoute: 'home',
+                debug: true
+            })
+            // Define routes
+            .route('home', 'home.html')
+            .route('about', 'about.html')
+            .route('contact', 'contact.html')
+            .route('custom', async (route) => {
+                // Custom handler
+                console.log('Custom route handler', route);
+            });
+    </script>
+</body>
+</html> 

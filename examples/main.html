@@ -1,0 +1,24 @@
+<div>
+    <h1>Main</h1>
+    <textarea id="textarea"></textarea>
+    <button id="button">Click</button>
+</div>
+<script>
+    async function init_komponent(k) {
+        console.log("init_komponent main",k);
+        this.test = {
+            a: 1,
+            b: 2
+        }
+        this.find("#button").on("click",()=>{
+            console.log(this.test);
+        });
+
+        this.find("#modalBtn").on("click",()=>{
+            komponentor.intent
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log("test",this.test);
+    }
+
+</script>

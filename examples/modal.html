@@ -1,0 +1,35 @@
+<style>
+    .modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 50%;
+        height: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+    }
+
+    .modal-content, .modal-header {
+        padding: 20px;
+    }
+</style>
+
+<div class="modal">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+        Title <button class="modal-close">X</button>
+    </div>
+    <div class="modal-content">
+        <p>This is a modal</p>
+    </div>
+</div>
+<script>
+    function init_komponent() {
+        this.find(".modal-close").on("click",()=>{
+            console.log("clicked",this);
+            this.$el.remove();
+        });
+        this.$el.appendTo("body");
+    }
+</script>
