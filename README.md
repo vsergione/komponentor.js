@@ -14,6 +14,7 @@
 
 ### Creating and using components
 
+#### Setup
 Include the following files in your project:
 ```HTML
 <script src="jquery.min.js"></script>
@@ -90,6 +91,7 @@ The router uses a simple hash-based URL format:
 
 ### Route Handlers
 Routes can be registered with either:
+- Komponent URL as string
 - Komponent configuration object (url, parameters)
 - Custom function handler which returns a Komponent configuration object
 
