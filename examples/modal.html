@@ -12,20 +12,29 @@
     }
 
     .modal-content, .modal-header {
-        padding: 20px;
+        padding: 10px;
     }
+    .modal-header {
+        background-color: rgb(150, 150, 150);
+    } 
 </style>
 
 <div class="modal">
     <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-        Title <button class="modal-close">X</button>
+        Modal (modal.html) <button class="modal-close">X</button>
     </div>
     <div class="modal-content">
-        <p>This is a modal</p>
+        <p class="comments">This modal component is displayed by calling an intent. 
+            The logic for attaching the modal to the DOM and removing it is implemented in the component's init_komponent function.</p> 
+            <p class="comments">The input bellow is bound to the main komponent's model. When updating the input, the model is updated and all the bound views are updated too.</p>
+        <form>
+            <label>Your  name <input type="text" name="name" value="${_.name}" onchange="console.log($(this).model);$(this).data().model.update('name',this.value)"/></label>
+        </form>
     </div>
 </div>
 <script>
     function init_komponent() {
+        this.data.test.bindView(new DataView(this.find(".modal-content"),this.data.test));
         this.find(".modal-close").on("click",()=>{
             console.log("clicked",this);
             this.$el.remove();

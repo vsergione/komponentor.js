@@ -1,0 +1,41 @@
+p{
+    margin-top: 2px;
+    margin-bottom: 10px;
+}
+body {
+    font-family: "Montserrat", serif;
+    font-optical-sizing: auto;
+    font-style: normal;
+    font-size: 14px;
+    display: flex;
+    justify-content: center; /* Centers horizontally */
+    margin: 0;
+}
+nav{
+    background-color: rgb(60, 96, 138);
+    padding: 10px;
+}
+nav a{
+    color: white;
+    text-decoration: none;
+    padding: 10px;
+}
+.container {
+    width: 90%;
+    max-width: 800px;
+    background-color: lightblue;
+}
+[is="komponent"],komponent {
+    border: 1px dashed rgb(73, 58, 58);
+    padding: 5px;
+    margin: 5px;
+    box-shadow: rgb(80, 79, 79) 0px 0px 5px;
+}
+.comments{
+    padding: 10px;
+    margin-top: 10px;
+    background-color: rgb(236, 236, 236);
+}
+komponent {
+    display: block;
+}

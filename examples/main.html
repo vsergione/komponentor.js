@@ -1,24 +1,38 @@
-<div>
-    <h1>Main</h1>
-    <textarea id="textarea"></textarea>
-    <button id="button">Click</button>
+<div id="main">
+    <h1>Main (main.html)</h1>
+    <p class="comments">This is the main komponent. It is loaded by default when the page is loaded.</p>
+    <p class="comments">Bellow is a form with a text input. The input is bound to a <b style="cursor: help;" title="The model library is not part of the Komponentor framework, but rather a simple library that we've developed to showcase the Komponentor framework.">model</b>.
+        When the input is changed, the model is updated. When the model is updated, all connected views are updated too.</p>
+    <form style="border: dotted black 1px; padding: 10px;">
+        <label>Your  name <input type="text" name="name" value="${_.name}" onchange="console.log($(this).model);$(this).data().model.update('name',this.value)"/></label>
+    </form>
+    <p class="comments">The button bellow triggers an intent which loads a modal komponent. An <b>intent</b> is a way of loading a komponent withouth attaching it to the DOM. 
+        It is up to the developer to decide if and where to attach it. Think of it as a function call.</p>
+    <div style="border: dotted black 1px; padding: 10px;">
+        
+        <button id="modalBtn">Modal Intent</button>
+    </div>
+
+    <p class="comments">Bellow is a subkomponent which is bound to the main component. The subkomponent is not rendered until the parent komponent finished loading. This is useful for lazy loading components</p>
+    <komponent id="view2" data-url="subcomponent.html" data-bind="#main"></komponent>
+    
+
 </div>
 <script>
+    
     async function init_komponent(k) {
         console.log("init_komponent main",k);
-        this.test = {
-            a: 1,
-            b: 2
-        }
+        this.find("input").on("keyup",()=>{
+            this.test.update(this.find("input").val());  
+        });
+        this.test = new DataModel({name: "John"});
+        this.test.bindView(new DataView(this.find("form"),this.test));
         this.find("#button").on("click",()=>{
             console.log(this.test);
         });
-
         this.find("#modalBtn").on("click",()=>{
-            komponentor.intent
+            komponentor.intent("modal.html").data(this).send();
         });
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log("test",this.test);
     }
 
 </script>

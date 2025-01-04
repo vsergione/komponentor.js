@@ -4,7 +4,6 @@
  */
 
 (function($) {
-    'use strict';
 
     const Router = {
         routes: {},
@@ -12,6 +11,7 @@
         defaultRoute: null,
         container: null,
         options: {
+            accessControl: (route)=>true,
             debug: false,
             autoInit: true
         }
@@ -107,7 +107,7 @@
         }
 
         let handler = null;
-        const routes = Object.keys(this.routes).sort();
+        const routes = Object.keys(this.routes).sort().reverse();
         for(let i=0;i<routes.length;i++) {
             if(route.path.match(new RegExp("^"+routes[i]+"$"))) {
                 handler = this.routes[routes[i]];
@@ -115,7 +115,15 @@
             }
         }
 
-        log('Handling route', route,handler);
+        // Check access control if configured
+        if (this.options.accessControl) {
+            const isAllowed = await this.options.accessControl(route);
+            if (!isAllowed) {
+                log('Access denied for route', route.path);
+                return;
+            }
+        }
+        log('Handling route', route, handler);
 
         if (!handler) {
             log('No handler found for route', route.path);
@@ -128,8 +136,11 @@
         try {
             if (typeof handler === 'function') {
                 // Execute function handler
-                await handler(route);
-            } else if (typeof handler === 'object') {
+                handler = await handler(route);
+                
+            } 
+            log("handler",handler);
+            if (typeof handler === 'object') {
                 // Load component
                 if (!this.container) {
                     throw new Error('No container specified for component rendering');
@@ -139,8 +150,7 @@
                 this.container.empty();
 
                 // Create component element
-                const componentEl = $('<div>')
-                    .attr('is', 'komponent')
+                const componentEl = $('<komponent>')
                     .appendTo(this.container);
 
                 // Load component with route params
@@ -183,7 +193,7 @@
     };
 
     // Export router to global scope
-    window.KomponentorRouter = Router;
+    window.krouter = Router;
 
     // Auto-initialize if enabled
     $(document).ready(() => {

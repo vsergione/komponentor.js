@@ -1,0 +1,13 @@
+<div id="view2">
+    <h2>Subcomponent (subcomponent.html)</h2>
+    <h3>Hello ${_.name}</h3>
+    <p class="comments">This is a subcomponent which is bound to the parent komponent.
+        This allows the subkomponent to access the main component's data and methods. <br><br>
+        
+        The header is bound to the main komponent's model. When the main komponent's model is updated, this component is updated too. Give it a try!</p>
+</div>
+<script>
+    async function init_komponent() {
+        this.data.test.bindView(new DataView(this.$el,this.data.test));
+    }
+</script>

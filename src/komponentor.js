@@ -160,7 +160,9 @@
                 console.error("Error in Komponent",error);
             }
         } catch (error) {
-            overlay.text("Componenta nu a putut fi incarcata: <pre>"+error.toString()+"</pre>");
+            overlay.remove();
+            kmp.$el.html("Could not load component "+kmp.url);
+            log("Error in Komponent",error);
             // throw(error);
             return kmp;
         }
@@ -226,9 +228,7 @@
         setTimeout(()=>k.$el.prev(".komponent-overlay").remove(),100);
 
 
-        
-        k.find("[is=komponent]").each((_,el)=>$(el).komponent());
-        k.find("komponent").each((_,el)=>$(el).komponent());
+     
 
         k.$el.data("komponent",k)
             .attr("is","komponent")
@@ -244,7 +244,11 @@
             console.error("Error in initKomponent",e);
         }
 
+        if(typeof k.autoload=="undefined" || k.autoload) {
 
+            k.find("[is=komponent]").each((_,el)=>$(el).komponent());
+            k.find("komponent").each((_,el)=>$(el).komponent());
+        }
     }
 
     /**
