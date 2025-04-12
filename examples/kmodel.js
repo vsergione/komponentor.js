@@ -9,6 +9,7 @@ class DataView {
      * @param {string} template
      */
     constructor(container,model,template) {
+       
         this.#container = container;
         this.#model = model;
         this.#template = typeof template==="undefined"?$(container).html():template; 

@@ -190,13 +190,21 @@
      * @param html
      */
     async function renderKomponent(k,html) {
+        
         let dummy = $("<div>").appendTo("body").append(html);
         dummy.find("script").each((_,item)=>{
             $(item).remove();
         });
-
-        const $renderedKomponent = dummy.children().remove();
+        let $renderedKomponent = dummy.children().remove();
         dummy.remove();
+
+        console.log($renderedKomponent,$renderedKomponent[0].tagName,$renderedKomponent.children());
+        if($renderedKomponent[0].tagName==="TEMPLATE") {
+            $renderedKomponent = $($renderedKomponent[0].content);
+        }
+        
+        
+        
 
         let initFunc;
 

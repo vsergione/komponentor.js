@@ -15,11 +15,11 @@
 ### Creating and using components
 
 #### Setup
-Include the following files in your project:
+Include the following files in your project before the closing body tag:
 ```HTML
 <script src="jquery.min.js"></script>
-<script src="komponentor.min.js"></script>
-<script src="krouter.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/vsergione/komponentor.js@main/dist/komponentor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/vsergione/komponentor.js@main/dist/krouter.min.js)"></script>
 ```
 
 #### Component definition

@@ -21,6 +21,7 @@
     const log = (...args) => {
         if (Router.options.debug) {
             console.log('[KomponentorRouter]', ...args);
+            console.trace('[KomponentorRouter]');
         }
     };
 
@@ -32,6 +33,7 @@
      * @param {string} options.defaultRoute Default route when none specified
      */
     Router.init = function(options = {}) {
+        log('Router.init',options);
         Object.assign(this.options, options);
         
         if (options.container) {
@@ -42,15 +44,17 @@
             this.defaultRoute = options.defaultRoute;
         }
 
+        if (options.routes) {
+            this.routes = options.routes;
+        }
+
         // Handle initial route
-        window.addEventListener('load', () => this.handleRoute());
+        window.addEventListener('load', (e) => this.handleRoute(e));
 
         // Handle route changes
         window.addEventListener('hashchange', (e) => {
-           log('Route handler called from:', new Error().stack.split('\n')[2].trim());
-
             e.preventDefault();
-            this.handleRoute();
+            this.handleRoute(e);
         });
 
         log('Router initialized', this.options);
@@ -97,7 +101,7 @@
     /**
      * Handle route change
      */
-    Router.handleRoute = async function() {
+    Router.handleRoute = async function(event) {
         const route = this.parseRoute();
         
         // Exit if hash hasn't changed from current route
@@ -137,9 +141,13 @@
             if (typeof handler === 'function') {
                 // Execute function handler
                 handler = await handler(route);
-                
             } 
             log("handler",handler);
+            if(typeof handler === 'string') {
+                handler = {
+                    url: handler
+                }
+            }
             if (typeof handler === 'object') {
                 // Load component
                 if (!this.container) {
@@ -195,17 +203,9 @@
     // Export router to global scope
     window.krouter = Router;
 
-    // Auto-initialize if enabled
-    $(document).ready(() => {
         // Wait for komponentor to be available
-        if (typeof window.komponentor === 'undefined') {
-            console.error('Komponentor not found. Make sure komponentor.modern.js is loaded first.');
-            return;
-        }
-
-        if (Router.options.autoInit) {
-            Router.init();
-        }
-    });
-
+    if (typeof window.komponentor === 'undefined') {
+        console.error('Komponentor not found. Make sure komponentor.modern.js is loaded first.');
+        return;
+    }
 })(jQuery); 
