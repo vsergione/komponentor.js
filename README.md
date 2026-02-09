@@ -1,110 +1,99 @@
-**Komponentor.js** is a lightweight JavaScript framework designed to simplify and speed up the development of web applications by leveraging reusable HTML components and hash routing. Each component is a standalone HTML file that bundles all necessary code – including HTML, CSS, and JavaScript – into a single, portable unit.
+# Komponentor
 
-## Key Features:
+A lightweight JavaScript framework for building modular web applications with HTML-based components, a component tree, hash routing, and optional headless intents.
 
-- Reusable Components: Build and manage modular components for consistent and scalable web apps.
-- Easy Integration: Attach components to any DOM node with minimal setup.
-- Dynamic Initialization: Pass parameters to components for customized behavior.
-- Event and Method Exposure: Interact with components through exposed events and methods.
-- Hash-based Routing: Built-in router for single-page application navigation.
-- Access Control: Easily manage access control for your routes.
- 
- 
-## Basic Usage
+## Features
 
-### Creating and using components
+- **Components** - Load HTML by URL into a host element; optional `init_komponent(komponent, data)` script; no build step.
+- **Component tree** - Parent/child hierarchy with cascade destroy.
+- **Scan** - Auto-mount components from `data-komponent="url|key=val"` markers in the DOM.
+- **Hash router** - Map hash paths to components; mount in an outlet with route params.
+- **Intents** - Headless "components" (no DOM node): load HTML, run init, optionally attach UI via the manager; can be part of the tree (destroy with parent).
+- **jQuery optional** - Core works without jQuery; jQuery is used only as a helper when present.
 
-#### Setup
-Include the following files in your project before the closing body tag:
-```HTML
-<script src="jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/vsergione/komponentor.js@main/dist/komponentor.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/vsergione/komponentor.js@main/dist/krouter.min.js)"></script>
+## Repository contents
+
+| Module        | File(s)        | Description |
+|---------------|----------------|-------------|
+| **Komponentor** | `src/komponentor.js` | Single-file runtime: mount, scan, route, intent, context lifecycle. |
+| **KViews**    | `src/kviews.js`     | KModel + KView: template rendering (Handlebars or built-in `{{key}}` fallback). Requires jQuery. |
+
+
+Built (minified) files go to `dist/` (e.g. `komponentor.min.js`, `kviews.min.js`).
+
+## Quick start
+
+1. **Include the script** (and optionally jQuery):
+
+```html
+<div id="app"></div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="path/to/komponentor.js"></script>
+<script>
+  komponentor.config.debug = true;
+  komponentor.config.baseUrl = "/";
+  komponentor.root("#app", "components/welcome.html");
+</script>
 ```
 
-#### Component definition
-```HTML
-<!-- component.html -->
-<div>
-    <h1>Hello <span id="name">name</span></h1>
+2. **Define a component** (e.g. `components/welcome.html`):
+
+```html
+<div class="welcome">
+  <h1>Hello</h1>
 </div>
 <script>
-    function init_komponent() {
-        this.find("#name").text(this.data.name);
-    }
+  function init_komponent(komponent, data) {
+    // komponent.find("h1"), komponent.ctx.on(...), etc.
+  }
 </script>
 ```
 
-#### Component usage
-```HTML
-<div is="komponent" data-url="component.html" id="my-komponent"></div>
-<script>
-    $("#my-komponent").komponent({
-        data: {
-            name: "John Doe"
-        }
-    });
-</script>
-```
-
-### Router Integration
-
-#### Router setup
-```javascript
-// Initialize the router
-krouter.init({
-    container: '#app',  // Main container for route components
-    defaultRoute: '/home'  // Optional default route
-});
-
-// Register static routes
-krouter.route('/home', { url: 'components/home.html' });
-krouter.route('/users', { url: 'components/users.html' });
-krouter.route('/users|id=123', { 
-    url: 'components/user-detail.html',
-    data: { someOption: true }
-});
-
-// Register custom route handler
-krouter.route('/path/to/.*', async (route) => {
-    return {
-        url:route.path.replace('/path/to/','/some/other/path/')+".html",
-        data:route.params
-    }
-});
-
-// Register catch all route handler
-krouter.route('.*', async (route) => {
-    // do something with the route
-    let url = route.path+".html";
-    return {url:url,data:route.params}
-});
-
-// Programmatic navigation
-krouter.navigate('/users', { id: 123 });  // Results in: #/users|id=123
-```
-
-### URL Format
-The router uses a simple hash-based URL format:
-- Basic route: `#/path`
-- With parameters: `#/path|param1=value1|param2=value2`
-
-### Route Handlers
-Routes can be registered with either:
-- Komponent URL as string
-- Komponent configuration object (url, parameters)
-- Custom function handler which returns a Komponent configuration object
+3. **Use the router** (optional):
 
 ```javascript
-// Component handler
-KomponentorRouter.route('/page', { url: 'page.html' });
-
-// Function handler
-KomponentorRouter.route('/custom', (params) => {
-    // Custom routing logic
-    return {url:'custom.html',data:params}
+komponentor.route({
+  outlet: "#app",
+  routes: {
+    "#/": "components/home.html",
+    "#/about": "components/about.html",
+  },
+  notFound: "components/404.html",
 });
+komponentor.navigate("#/about");
 ```
 
-## Reference
-The reference documentation is still in progress. To get an idea of what's possible see the examples folder.
+## API (single-file Komponentor)
+
+| Method | Description |
+|--------|-------------|
+| `komponentor.root(host, urlOrOpts)` | Set app root; replace previous root. |
+| `komponentor.mount(host, urlOrOpts)` | Mount a component on `host`. |
+| `komponentor.scan(container?, { parent?, replaceExisting? })` | Mount all `[data-komponent]` in `container`. |
+| `komponentor.route({ outlet, routes, notFound })` | Configure and start hash router. |
+| `komponentor.navigate(hash)` | Set `location.hash`. |
+| `komponentor.intent(urlOrOpts).data(...).send({ parent? })` | Run a headless intent (no DOM); optional `parent` for tree lifecycle. |
+| `komponentor.runIntent(url, data, { parent? })` | Convenience wrapper for intent. |
+
+Component marker in HTML: `data-komponent="/path/to/file.html|key=value"`.
+
+## Build
+
+```bash
+npm install
+npm run build
+```
+
+This minifies `src/**/*.js` into `dist/` (with source maps). Use `npm run watch` to rebuild on change.
+
+## Documentation
+
+- **[docs/komponentor.md](docs/komponentor.md)** - Komponentor: API, config, mount/scan, Context, Komponent, Intent, router.
+- **[docs/kviews.md](docs/kviews.md)** - KViews: KModel, KView, getKModel, templates, lifecycle.
+- **[docs/HOW-TO-GUIDE.md](docs/HOW-TO-GUIDE.md)** - Single-file Komponentor: setup, mount, scan, router, intents, nested components, events.
+
+Example pages are in **docs/examples/**.
+
+## License
+
+MIT (see [LICENSE](LICENSE)).

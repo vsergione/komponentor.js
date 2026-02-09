@@ -1,0 +1,212 @@
+# Komponentor
+
+Komponentor is a lightweight JavaScript framework for loading HTML components by URL, managing a tree of components with lifecycle and destroy cascades, and optional hash-based routing and headless intents.
+
+**File:** `src/komponentor.js`  
+**Dependencies:** None required; jQuery is used only as a helper if present.
+
+---
+
+## Public API
+
+| Method | Description |
+|--------|-------------|
+| `komponentor.root(host, urlOrOpts)` | Set the app root: mount component at `host`, destroy any existing root. Returns the root Komponent instance. |
+| `komponentor.mount(host, urlOrOpts)` | Mount a component at `host`. Returns the Komponent instance (mount runs async). |
+| `komponentor.scan(container?, { parent?, replaceExisting? })` | Scan `container` (default `document.body`) for `data-komponent` markers and mount components. |
+| `komponentor.route({ outlet, routes, notFound })` | Configure and start the hash router. |
+| `komponentor.navigate(hash)` | Set `location.hash` (triggers route handler). |
+| `komponentor.intent(urlOrOpts)` | Fluent intent builder: `.data(key, val)` or `.data(obj)`, then `.send({ parent })` -> runs intent and returns the Intent. |
+| `komponentor.runIntent(url, data, { parent })` | Convenience: run an intent and return it after completion. |
+
+---
+
+## Configuration
+
+The global `komponentor` is a **Komponentor** instance. If you assign a plain object to `komponentor` before the script runs, it is used as initial config.
+
+```javascript
+komponentor.config.debug = true;
+komponentor.config.baseUrl = "/api";   // prepended to URLs starting with /
+komponentor.config.markerAttr = "data-komponent";
+komponentor.config.overlayClass = "komponent-overlay";
+komponentor.config.overlayHtml = "<div>Loading</div>";
+komponentor.config.errorHtml = (url, err) => `<div>Failed: ${url}</div>`;
+komponentor.config.fetchOptions = {};  // passed to fetch()
+```
+
+---
+
+## Component marker
+
+Declare child components in HTML:
+
+```html
+<div data-komponent="/path/to/component.html"></div>
+<div data-komponent="/view.html|id=5|foo=bar"></div>
+```
+
+- **Spec format:** `url|key=value|key2=value2` — URL plus optional pipe-separated key=value pairs merged into `data`.
+- Other `data-*` attributes on the element are also merged into the component's `data` (camelCase keys).
+
+---
+
+## Mount options
+
+`urlOrOpts` can be a string (URL or full spec) or an object:
+
+| Option | Description |
+|--------|-------------|
+| `url` | Component HTML URL (or spec with `|key=val`). |
+| `data` | Object merged with parsed spec/attributes, passed to `init_komponent(k, data)`. |
+| `replace` | If true, destroy existing component on same host before mounting. |
+| `autoload` | If true (default), scan for `data-komponent` children after mount. |
+| `overlay` | If true (default), show loading overlay during fetch. |
+| `parent` | Komponent or Intent instance; new component is attached as child. |
+
+---
+
+## Komponent instance
+
+Each mounted component is a **Komponent** with:
+
+- **`hostEl`** - DOM element that hosts the component.
+- **`opts`** - Normalized mount options.
+- **`data`** - Data passed to init.
+- **`ctx`** - **Context** (see below).
+- **`parent`** / **`children`** - Component tree (parent may be Komponent or Intent).
+
+**Methods:**
+
+- **`find(selector)`** - `hostEl.querySelector(selector)`.
+- **`findAll(selector)`** - `hostEl.querySelectorAll(selector)` as array.
+- **`mount()`** - Run mount (fetch, render, init). Returns a Promise; usually called internally.
+- **`scan({ replaceExisting })`** - Scan this component’s host for `data-komponent` and mount children (once per lifetime unless `replaceExisting: true`).
+- **`remount()`** - Destroy this component and mount a fresh one on the same host.
+- **`destroy()`** - Destroy children, destroy context, clear `hostEl.innerHTML`, unlink from parent.
+
+---
+
+## Context (lifecycle and events)
+
+Each Komponent (and Intent) has a **Context** `k.ctx`:
+
+- **`k.ctx.id`** - Unique id.
+- **`k.ctx.ready`** - True after init has run.
+- **`k.ctx.state`** - `"initial"` | `"loading"` | `"rendering"` | `"init"` | `"ready"` | `"error"` | `"destroying"` | `"destroyed"`.
+- **`k.ctx.parent`** - Parent context (if any).
+- **`k.ctx.children`** - Child contexts.
+
+**Events:** `on(event, fn, ctx)`, `off(event, fn, ctx)`, `trigger(event, payload)`.
+
+- **`state:change`** - `{ state, ctx }`.
+- **`state:<name>`** - When state becomes `<name>`.
+- **`context:destroy`** - When context is being destroyed.
+
+**Lifecycle:**
+
+- **`onDestroy(fn)`** - Register a function to run when the context is destroyed (children destroyed first, then destroyers in reverse order).
+- **`requestText(url, fetchOpts)`** - Fetch URL with abort on destroy or new request; returns response text or null if stale/destroyed.
+- **`requestAbort()`** - Abort current request.
+- **`emitUp(event, payload)`** - Trigger event on this context and each parent up the tree.
+- **`emitRoot(event, payload)`** - Trigger event on the root context.
+- **`destroy()`** - Abort request, destroy children, run destroyers, clear events.
+
+---
+
+## Init convention
+
+Fetched HTML may contain a `<script>` that defines:
+
+```javascript
+function init_komponent(k, data) {
+  // k = Komponent (or Intent) instance
+  // data = opts.data
+  // Use k.ctx.onDestroy(() => { ... }) for cleanup
+}
+```
+
+If present, this function is called after the fragment is rendered into the host. Scripts are stripped from the fragment; only the function is extracted and run in an isolated scope.
+
+---
+
+## Intents (headless)
+
+Intents load component HTML and run its init **without** rendering into a host. Use for modals, workers, or logic-only “components”.
+
+**Fluent builder:**
+
+```javascript
+const intent = await komponentor.intent("modal.html|id=1")
+  .data("model", myModel)
+  .data({ source: k })
+  .send({ parent: k });
+// intent.ctx.ready, intent.data; intent may mount DOM inside its init
+```
+
+**Convenience:**
+
+```javascript
+const intent = await komponentor.runIntent("service/worker.html", { task: "sync" });
+```
+
+- **`parent`** - Optional Komponent or Intent; the new Intent is attached as child and destroyed when parent is destroyed.
+- Intent has **`ctx`**, **`url`**, **`data`**, **`children`**, **`run()`**, **`destroy()`**. It does not replace any DOM; init can use `komponentor.mount()` if needed.
+
+---
+
+## Hash router
+
+```javascript
+komponentor.route({
+  outlet: "#app",           // selector for mount target
+  routes: {
+    "#/": "view1.html",
+    "#/users/:id": "user.html"
+  },
+  notFound: "404.html"      // optional
+});
+```
+
+- Routes are matched by hash (e.g. `#/users/5`). Pattern `:id` captures one segment.
+- On match, the outlet is mounted with `url` and `data: { route: { hash, params } }`, with `replace: true`.
+- **`komponentor.navigate(hash)`** - Sets `location.hash` (handler runs on `hashchange`).
+
+---
+
+## Exposed classes
+
+For advanced use, the following are attached to `komponentor`:
+
+- **`Komponentor`** - Manager class.
+- **`Komponent`** - Component node class.
+- **`Context`** - Lifecycle/event context.
+- **`HashRouter`** - Router class.
+- **`Intent`** - Intent class.
+
+---
+
+## Load order
+
+1. jQuery (optional).
+2. `komponentor.js`.
+
+
+---
+
+## Quick example
+
+```html
+<div id="app" data-komponent="app.html"></div>
+<script src="komponentor.js"></script>
+<script>
+  komponentor.config.baseUrl = "./";
+  komponentor.root("#app", "app.html");
+</script>
+```
+
+Or with router:
+
+```javascript
+komponentor.route({ outlet: "#app", routes: { "#/": "home.html" } });
+```
