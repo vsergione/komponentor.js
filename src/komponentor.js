@@ -14,6 +14,8 @@
  *   komponentor.intent(urlOrOpts)  -> fluent .data(...).send({ parent })
  *   komponentor.runIntent(url, data, { parent })
  *
+ * Mount option: replaceHost: true — replace the host element with the component root (host is removed; id is copied so e.g. #app still works). Destroy then removes the new root from DOM. remount() mounts onto the detached node unless you pass a new host.
+ *
  * Component marker:
  *   <div data-komponent="/path/to/component.html|id=5|foo=bar"></div>
  *
@@ -439,10 +441,14 @@
           this.ctx.destroy();
         } catch (_) {}
   
-        // DOM ownership cleanup:
-        // you said host stays; component clears only its interior
+        // DOM ownership cleanup
         try {
-          this.hostEl.innerHTML = "";
+          if (this.opts.replaceHost) {
+            if (this.hostEl.parentNode) this.hostEl.parentNode.removeChild(this.hostEl);
+            clearInst(this.hostEl, this);
+          } else {
+            this.hostEl.innerHTML = "";
+          }
         } catch (_) {}
   
         // unlink from parent component list (best effort)
@@ -680,6 +686,7 @@
             url: "",
             data: {},
             replace: false,
+            replaceHost: false,  // if true, replace the host element with the component root (see docs)
             autoload: true,  // default: scan data-komponent children after mount
             overlay: true,
             parent: null,
@@ -764,10 +771,35 @@
   
       _renderIntoHost(komponent, fragment) {
         const host = komponent.hostEl;
-        // clear owned content
-        host.innerHTML = "";
-        // append fragment nodes
-        host.appendChild(fragment.cloneNode(true));
+        if (komponent.opts.replaceHost) {
+          const parent = host.parentNode;
+          if (!parent) {
+            if (this.config.debug) this.log("replaceHost: host has no parent, falling back to append");
+            host.innerHTML = "";
+            host.appendChild(fragment.cloneNode(true));
+            return;
+          }
+          const clone = fragment.cloneNode(true);
+          const childElements = clone.children ? Array.from(clone.children) : [];
+          let newRoot;
+          if (childElements.length === 1) {
+            newRoot = childElements[0];
+          } else if (childElements.length === 0) {
+            newRoot = document.createElement("div");
+          } else {
+            newRoot = document.createElement("div");
+            while (clone.firstChild) newRoot.appendChild(clone.firstChild);
+          }
+          if (host.id) newRoot.id = host.id;
+          parent.replaceChild(newRoot, host);
+          clearInst(host, komponent);
+          setInst(newRoot, komponent);
+          komponent.hostEl = newRoot;
+          if (komponent.$host) komponent.$host = $ ? $(newRoot) : null;
+        } else {
+          host.innerHTML = "";
+          host.appendChild(fragment.cloneNode(true));
+        }
       }
   
       _renderError(komponent, err) {

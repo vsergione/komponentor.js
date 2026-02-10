@@ -4,6 +4,7 @@
     <p>It is a simple example to showcase the Komponentor framework.</p>
     <p>It loads the app.html file into the #app div.</p>
     <p>It is a simple example to showcase the Komponentor framework.</p>
+    <div id="test"></div>
     <a href="#view1" id="btn-load-view1">View 1</a>
     <a href="#view2" id="btn-load-view2">View 2</a>
     <a id="intent-button" >Intent View 2</a>
@@ -11,6 +12,8 @@
     <div id="view"></div>
     <script>
         function init_komponent(k, data) {
+            komponentor.mount(k.hostEl.querySelector("#test"), {url:"view1.html",replaceHost:true});
+
             komponentor.route({
                 outlet: "#view",
                 routes: {

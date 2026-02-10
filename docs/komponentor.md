@@ -60,9 +60,18 @@ Declare child components in HTML:
 | `url` | Component HTML URL (or spec with `|key=val`). |
 | `data` | Object merged with parsed spec/attributes, passed to `init_komponent(k, data)`. |
 | `replace` | If true, destroy existing component on same host before mounting. |
+| `replaceHost` | If true, **replace** the host element with the component root (host is removed from DOM). See implications below. |
 | `autoload` | If true (default), scan for `data-komponent` children after mount. |
 | `overlay` | If true (default), show loading overlay during fetch. |
 | `parent` | Komponent or Intent instance; new component is attached as child. |
+
+### Implications of `replaceHost: true`
+
+- **Default (`replaceHost: false`):** The host element stays; its `innerHTML` is cleared and the component content is appended inside it. On destroy, only the host’s contents are cleared; the host remains.
+- **With `replaceHost: true`:** The host node is **removed** and the component’s root (first element from the template, or a wrapper if the template has 0 or multiple top-level nodes) is inserted in its place. The component’s `hostEl` is updated to this new root, and the instance is re-attached to it (`KEY_INST`). The host’s **`id`** is copied to the new root so selectors like `#app` still resolve (e.g. for the router outlet).
+- **Destroy:** With replace-host, `destroy()` **removes** the component root from the DOM and clears the instance reference. With default behavior, destroy only clears `hostEl.innerHTML`.
+- **remount():** With replace-host, after `destroy()` the previous root is no longer in the document. `remount()` then calls `mount(this.hostEl, ...)` on that detached node, so the new component’s content is not in the document. Prefer creating a new host and calling `mount(host, urlOrOpts)` yourself when using replace-host and needing to “remount”.
+- **Router:** Using `replaceHost: true` on the root/outlet (e.g. `root("#app", "app.html", { replaceHost: true })`) is fine: the new root keeps the host’s `id`, so the outlet selector `#app` still works for the next route change.
 
 ---
 
@@ -83,7 +92,7 @@ Each mounted component is a **Komponent** with:
 - **`mount()`** - Run mount (fetch, render, init). Returns a Promise; usually called internally.
 - **`scan({ replaceExisting })`** - Scan this component’s host for `data-komponent` and mount children (once per lifetime unless `replaceExisting: true`).
 - **`remount()`** - Destroy this component and mount a fresh one on the same host.
-- **`destroy()`** - Destroy children, destroy context, clear `hostEl.innerHTML`, unlink from parent.
+- **`destroy()`** - Destroy children, destroy context; then clear `hostEl.innerHTML` (default) or remove `hostEl` from DOM (if `replaceHost` was used), and unlink from parent.
 
 ---
 
