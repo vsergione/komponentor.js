@@ -1,8 +1,8 @@
-# KViews
+# KSimpleViews
 
-KViews provides simple **KModel** (observable data) and **KView** (template-backed view) binding. Views re-render when the model’s data changes. No Komponentor dependency.
+KSimpleViews provides simple **KModel** (observable data) and **KView** (template-backed view) binding. Views re-render when the model’s data changes. No Komponentor dependency.
 
-**File:** `src/kviews.js`  
+**File:** `src/ksimpleviews.js`  
 **Dependencies:** jQuery (required). Handlebars optional (full template syntax); otherwise a built-in `{{key}}` / `{{key.sub}}` fallback is used.
 
 ---
@@ -136,7 +136,7 @@ Returns the **KModel** attached to the nearest ancestor that is a KView root (`[
 
 ## Template syntax
 
-- **With Handlebars:** Full Handlebars syntax (`{{name}}`, `{{#if x}}...{{/if}}`, etc.). Use `window.Handlebars` before loading kviews.
+- **With Handlebars:** Full Handlebars syntax (`{{name}}`, `{{#if x}}...{{/if}}`, etc.). Use `window.Handlebars` before loading KSimpleViews.
 - **Without Handlebars:** Only **`{{key}}`** and **`{{key.sub}}`** (dot path), no conditionals or loops.
 
 Templates are compiled once from the element’s `outerHTML` at construction time.
@@ -155,7 +155,11 @@ k.data.test = model;
 ```
 
 Pass the **lifecycle** object that has **`onDestroy(fn)`**. With Komponentor, use **`k.ctx`** so the view is destroyed when the component is destroyed.
-</think>
-Fixing the accidental paste and completing the doc.
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-StrReplace
+
+---
+
+## Load order
+
+1. jQuery  
+2. (Optional) Handlebars  
+3. `ksimpleviews.js`

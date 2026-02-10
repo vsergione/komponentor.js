@@ -16,10 +16,10 @@ A lightweight JavaScript framework for building modular web applications with HT
 | Module        | File(s)        | Description |
 |---------------|----------------|-------------|
 | **Komponentor** | `src/komponentor.js` | Single-file runtime: mount, scan, route, intent, context lifecycle. |
-| **KViews**    | `src/kviews.js`     | KModel + KView: template rendering (Handlebars or built-in `{{key}}` fallback). Requires jQuery. |
+| **KSimpleViews** | `src/ksimpleviews.js` | KModel + KView: template rendering (Handlebars or built-in `{{key}}` fallback). Requires jQuery. |
 
 
-Built (minified) files go to `dist/` (e.g. `komponentor.min.js`, `kviews.min.js`).
+The build (esbuild) outputs to `dist/`: each script has a development (e.g. `komponentor.js`) and a minified (e.g. `komponentor.min.js`) version, both with source maps.
 
 ## Quick start
 
@@ -79,17 +79,19 @@ Component marker in HTML: `data-komponent="/path/to/file.html|key=value"`.
 
 ## Build
 
+Build is powered by **esbuild**. Each file in `src/` is built to `dist/` as both a development and a minified bundle (with source maps).
+
 ```bash
 npm install
 npm run build
 ```
 
-This minifies `src/**/*.js` into `dist/` (with source maps). Use `npm run watch` to rebuild on change.
+Output: `dist/<name>.js` and `dist/<name>.min.js` for each `src/<name>.js`. Use `npm run watch` to rebuild on change.
 
 ## Documentation
 
 - **[docs/komponentor.md](docs/komponentor.md)** - Komponentor: API, config, mount/scan, Context, Komponent, Intent, router.
-- **[docs/kviews.md](docs/kviews.md)** - KViews: KModel, KView, getKModel, templates, lifecycle.
+- **[docs/ksimpleviews.md](docs/ksimpleviews.md)** - KSimpleViews: KModel, KView, getKModel, templates, lifecycle.
 - **[docs/HOW-TO-GUIDE.md](docs/HOW-TO-GUIDE.md)** - Single-file Komponentor: setup, mount, scan, router, intents, nested components, events.
 
 Example pages are in **docs/examples/**.

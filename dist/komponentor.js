@@ -1,0 +1,745 @@
+/*! komponentor v1.0.0
+ * A jQuery plugin to create modular web apps
+ * (c) 2026
+ * Released under the MIT License
+ */
+
+(() => {
+  /*!
+   * Komponentor (single-file)
+   * - Tree of components (parent/children), local scan
+   * - Destroy cascades
+   * - Optional hash router
+   * - jQuery optional (used only as helper if present)
+   *
+   * Public API (minimal):
+   *   komponentor.root(host, urlOrOpts)
+   *   komponentor.mount(host, urlOrOpts)
+   *   komponentor.scan(container?, { parent?, replaceExisting? })
+   *   komponentor.route({ outlet, routes, notFound })
+   *   komponentor.navigate(hash)
+   *   komponentor.intent(urlOrOpts)  -> fluent .data(...).send({ parent })
+   *   komponentor.runIntent(url, data, { parent })
+   *
+   * Component marker:
+   *   <div data-komponent="/path/to/component.html|id=5|foo=bar"></div>
+   *
+   * Intent usage examples:
+   *   // From a component (intent becomes part of the branch; destroyed when parent is destroyed)
+   *   async function init_komponent(k, data) {
+   *     const i = await komponentor.intent("modal.html|id=1").data({ source: k }).send({ parent: k });
+   *     // i.ctx.ready, i.data; i may mount DOM via komponentor.mount(...) inside modal's init
+   *   }
+   *
+   *   // Global intent (no parent; not attached to any component tree)
+   *   const i = await komponentor.runIntent("service/worker.html", { task: "sync" });
+   */
+  (function(global) {
+    "use strict";
+    const $ = global.jQuery || null;
+    const KEY_INST = "__kp_instance__";
+    const KEY_LOCK = "__kp_mounting__";
+    function isPlainObject(x) {
+      return x && typeof x === "object" && x.constructor === Object;
+    }
+    function uid(prefix = "") {
+      return prefix + Math.random().toString(36).slice(2, 9) + "_" + Math.random().toString(36).slice(2, 7);
+    }
+    function normalizeHost(host) {
+      if (!host) throw new Error("Invalid host");
+      if (typeof host === "string") {
+        const el = document.querySelector(host);
+        if (!el) throw new Error(`Host not found: ${host}`);
+        return el;
+      }
+      if ($ && host instanceof $) return host[0];
+      if (host instanceof Element) return host;
+      throw new Error("Invalid host type");
+    }
+    function getInst(el) {
+      return el ? el[KEY_INST] || null : null;
+    }
+    function setInst(el, inst) {
+      el[KEY_INST] = inst;
+    }
+    function clearInst(el, inst) {
+      if (el && el[KEY_INST] === inst) el[KEY_INST] = null;
+    }
+    function lockHost(el, inst) {
+      if (el[KEY_LOCK]) return false;
+      el[KEY_LOCK] = inst || true;
+      return true;
+    }
+    function unlockHost(el, inst) {
+      if (!el) return;
+      if (el[KEY_LOCK] === inst || inst == null) el[KEY_LOCK] = null;
+    }
+    function parseSpec(specText) {
+      const out = { url: "", data: {} };
+      if (!specText) return out;
+      const parts = String(specText).split("|");
+      out.url = parts.shift() || "";
+      parts.forEach((p) => {
+        if (!p) return;
+        const i = p.indexOf("=");
+        if (i === -1) {
+          out.data[p] = null;
+        } else {
+          const k = p.slice(0, i);
+          const v = p.slice(i + 1);
+          out.data[k] = v === "" ? "" : v;
+        }
+      });
+      return out;
+    }
+    function markerAttrToDatasetKey(attrName) {
+      if (!attrName || !String(attrName).toLowerCase().startsWith("data-")) return null;
+      return String(attrName).slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    }
+    function getDataAttributesFromElement(el, markerAttr) {
+      if (!el || !el.dataset) return {};
+      const excludeKey = markerAttrToDatasetKey(markerAttr);
+      const out = {};
+      for (const key in el.dataset) {
+        if (key === excludeKey) continue;
+        out[key] = el.dataset[key];
+      }
+      return out;
+    }
+    class EventBus {
+      constructor() {
+        this._map = /* @__PURE__ */ new Map();
+      }
+      on(event, fn, ctx) {
+        if (typeof fn !== "function") return;
+        const arr = this._map.get(event) || [];
+        arr.push({ fn, ctx: ctx || null });
+        this._map.set(event, arr);
+      }
+      off(event, fn, ctx) {
+        const arr = this._map.get(event);
+        if (!arr) return;
+        this._map.set(
+          event,
+          arr.filter((l) => !(l.fn === fn && (ctx == null || l.ctx === ctx)))
+        );
+      }
+      emit(event, payload, thisArg) {
+        const arr = this._map.get(event);
+        if (!arr || !arr.length) return;
+        for (const l of arr.slice()) {
+          try {
+            l.fn.call(l.ctx || thisArg || null, payload);
+          } catch (e) {
+          }
+        }
+      }
+      clear() {
+        this._map.clear();
+      }
+    }
+    class Context {
+      constructor(owner, manager) {
+        this.id = uid("k_");
+        this.owner = owner;
+        this.manager = manager;
+        this.parent = null;
+        this.children = [];
+        this.ready = false;
+        this._destroyed = false;
+        this._state = "initial";
+        this._bus = new EventBus();
+        this._destroyers = [];
+        this._req = { token: 0, ctrl: null };
+      }
+      get state() {
+        return this._state;
+      }
+      set state(v) {
+        this._state = v;
+        this.trigger("state:change", { state: v, ctx: this });
+        this.trigger(`state:${v}`, this);
+      }
+      on(event, fn, ctx) {
+        this._bus.on(event, fn, ctx || this);
+        return this;
+      }
+      off(event, fn, ctx) {
+        this._bus.off(event, fn, ctx || this);
+        return this;
+      }
+      trigger(event, payload) {
+        this._bus.emit(event, payload, this);
+        return this;
+      }
+      // bubble-up event (cross-branch through common ancestor)
+      emitUp(event, payload) {
+        let p = this.parent;
+        while (p) {
+          p.trigger(event, payload);
+          p = p.parent;
+        }
+        return this;
+      }
+      // root-level event (global within app root)
+      emitRoot(event, payload) {
+        const root = this.manager && this.manager._rootCtx ? this.manager._rootCtx : null;
+        if (root) root.trigger(event, payload);
+        return this;
+      }
+      onDestroy(fn) {
+        if (typeof fn === "function") this._destroyers.push(fn);
+        return this;
+      }
+      requestAbort() {
+        try {
+          if (this._req.ctrl) this._req.ctrl.abort();
+        } catch (_) {
+        }
+        this._req.ctrl = null;
+      }
+      // fetch wrapper with stale-guard
+      async requestText(url, fetchOpts = {}) {
+        this._req.token += 1;
+        const t = this._req.token;
+        this.requestAbort();
+        const ctrl = new AbortController();
+        this._req.ctrl = ctrl;
+        const res = await fetch(url, Object.assign({}, fetchOpts, { signal: ctrl.signal }));
+        if (this._destroyed) return null;
+        if (t !== this._req.token) return null;
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        const text = await res.text();
+        if (this._destroyed) return null;
+        if (t !== this._req.token) return null;
+        return text;
+      }
+      destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        this.state = "destroying";
+        this.trigger("context:destroy", this);
+        this.requestAbort();
+        const kids = this.children.slice();
+        this.children = [];
+        for (const ch of kids) {
+          try {
+            if (ch && typeof ch.destroy === "function") ch.destroy();
+          } catch (_) {
+          }
+        }
+        const ds = this._destroyers.slice().reverse();
+        this._destroyers = [];
+        for (const fn of ds) {
+          try {
+            fn(this);
+          } catch (_) {
+          }
+        }
+        this._bus.clear();
+        this.ready = false;
+        this.state = "destroyed";
+      }
+    }
+    class Komponent {
+      constructor(manager, host, opts) {
+        this.manager = manager;
+        this.hostEl = normalizeHost(host);
+        this.$host = $ ? $(this.hostEl) : null;
+        this.opts = manager._normalizeOpts(opts);
+        this.url = this.opts.url || "";
+        this.data = this.opts.data || {};
+        this.parent = this.opts.parent || null;
+        this.children = [];
+        this._scanned = false;
+        this._destroyed = false;
+        if (!lockHost(this.hostEl, this)) {
+          const existing = getInst(this.hostEl);
+          if (existing) return existing;
+          if (manager.config.debug) {
+            throw new Error("Host is already mounting (concurrent mount detected).");
+          }
+        }
+        setInst(this.hostEl, this);
+        this.ctx = new Context(this, manager);
+        if (this.parent && (this.parent instanceof Komponent || this.parent instanceof Intent)) {
+          this.parent.children.push(this);
+          this.ctx.parent = this.parent.ctx;
+          this.parent.ctx.children.push(this.ctx);
+        }
+        this.ctx.onDestroy(() => {
+          unlockHost(this.hostEl, this);
+          clearInst(this.hostEl, this);
+        });
+      }
+      // helper: scoped query
+      find(selector) {
+        return this.hostEl.querySelector(selector);
+      }
+      findAll(selector) {
+        return Array.from(this.hostEl.querySelectorAll(selector));
+      }
+      // public: mount once (if re-called, destroys first by policy)
+      async mount() {
+        if (this._destroyed) return this;
+        this.ctx.state = "loading";
+        try {
+          if (this.opts.overlay !== false) this.manager.overlay.show(this);
+          const url = this.manager._resolveUrl(this.url);
+          const htmlText = await this.ctx.requestText(url, this.manager.config.fetchOptions || {});
+          if (htmlText == null) return this;
+          const { fragment, init } = this.manager._parseHtml(htmlText, this);
+          this.ctx.state = "rendering";
+          this.manager._renderIntoHost(this, fragment);
+          this.ctx.state = "init";
+          if (typeof init === "function") {
+            await init(this, this.data);
+          }
+          this.ctx.ready = true;
+          this.ctx.state = "ready";
+          if (this.opts.autoload !== false) {
+            this.scan({ replaceExisting: this.opts.replaceExistingChildren === true });
+          }
+        } catch (e) {
+          this.ctx.state = "error";
+          this.manager._renderError(this, e);
+          if (this.manager.config.debug) this.manager.log("mount error", e);
+        } finally {
+          this.manager.overlay.hide(this);
+          unlockHost(this.hostEl, this);
+        }
+        return this;
+      }
+      // scan local branch only
+      scan({ replaceExisting = false } = {}) {
+        if (this._destroyed) return this;
+        if (this._scanned && replaceExisting !== true) return this;
+        this._scanned = true;
+        this.manager.scan(this.hostEl, {
+          parent: this,
+          replaceExisting
+        });
+        return this;
+      }
+      // explicit remount policy: destroy then mount
+      async remount() {
+        if (this._destroyed) return this;
+        this.destroy();
+        return this.manager.mount(this.hostEl, Object.assign({}, this.opts, { replace: true }));
+      }
+      destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        const kids = this.children.slice();
+        this.children = [];
+        for (const ch of kids) {
+          try {
+            ch.destroy();
+          } catch (_) {
+          }
+        }
+        try {
+          this.ctx.destroy();
+        } catch (_) {
+        }
+        try {
+          this.hostEl.innerHTML = "";
+        } catch (_) {
+        }
+        if (this.parent && this.parent.children) {
+          const i = this.parent.children.indexOf(this);
+          if (i !== -1) this.parent.children.splice(i, 1);
+        }
+      }
+    }
+    class Intent {
+      constructor(manager, opts) {
+        this.manager = manager;
+        opts = manager._normalizeIntentOpts(opts);
+        this.url = opts.url || "";
+        this.data = opts.data || {};
+        this.parent = opts.parent || null;
+        this.children = [];
+        this.hostEl = null;
+        this.ctx = new Context(this, manager);
+        if (this.parent && (this.parent instanceof Komponent || this.parent instanceof Intent)) {
+          this.parent.children.push(this);
+          this.ctx.parent = this.parent.ctx;
+          this.parent.ctx.children.push(this.ctx);
+        }
+      }
+      async run() {
+        if (this.ctx._destroyed) return this;
+        if (!this.url) {
+          this.ctx.state = "error";
+          if (this.manager.config.debug) this.manager.log("intent run: no url");
+          return this;
+        }
+        this.ctx.state = "loading";
+        if (this.manager.config.debug) this.manager.log("intent run", this.url);
+        try {
+          const url = this.manager._resolveUrl(this.url);
+          const htmlText = await this.ctx.requestText(url, this.manager.config.fetchOptions || {});
+          if (htmlText == null) return this;
+          const { fragment, init } = this.manager._parseHtml(htmlText, this);
+          this.hostEl = fragment.cloneNode(true);
+          console.log("hostEl", this.hostEl);
+          this.ctx.state = "init";
+          if (typeof init === "function") {
+            await init(this, this.data);
+          }
+          this.ctx.ready = true;
+          this.ctx.state = "ready";
+        } catch (e) {
+          this.ctx.state = "error";
+          if (this.manager.config.debug) this.manager.log("intent run error", this.url, e);
+        }
+        return this;
+      }
+      destroy() {
+        const kids = this.children.slice();
+        this.children = [];
+        for (const ch of kids) {
+          try {
+            if (ch && typeof ch.destroy === "function") ch.destroy();
+          } catch (_) {
+          }
+        }
+        try {
+          this.ctx.destroy();
+        } catch (_) {
+        }
+        if (this.parent && this.parent.children) {
+          const i = this.parent.children.indexOf(this);
+          if (i !== -1) this.parent.children.splice(i, 1);
+        }
+      }
+    }
+    class HashRouter {
+      constructor(manager) {
+        this.manager = manager;
+        this._started = false;
+        this._handler = null;
+        this.routes = [];
+        this.outlet = null;
+        this.notFound = null;
+      }
+      // "#/users/:id" -> regex + keys
+      _compile(pattern) {
+        const keys = [];
+        let rx = "^" + pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        rx = rx.replace(/\\:([a-zA-Z0-9_]+)/g, (_, k) => {
+          keys.push(k);
+          return "([^/]+)";
+        });
+        rx += "$";
+        return { regex: new RegExp(rx), keys };
+      }
+      configure({ outlet = "#app", routes = {}, notFound = null } = {}) {
+        this.outlet = outlet;
+        this.notFound = notFound;
+        this.routes = [];
+        if (Array.isArray(routes)) {
+          routes.forEach((r) => this.add(r.path, r.url));
+        } else {
+          Object.entries(routes).forEach(([path, url]) => this.add(path, url));
+        }
+        return this;
+      }
+      add(pathPattern, url) {
+        const c = this._compile(pathPattern);
+        this.routes.push({ pattern: pathPattern, keys: c.keys, regex: c.regex, url });
+        return this;
+      }
+      match(hash) {
+        for (const r of this.routes) {
+          const m = r.regex.exec(hash);
+          if (!m) continue;
+          const params = {};
+          r.keys.forEach((k, i) => params[k] = m[i + 1]);
+          return { url: r.url, route: { hash, params } };
+        }
+        return null;
+      }
+      start() {
+        if (this._started) return;
+        this._started = true;
+        this._handler = () => {
+          const hash = global.location.hash || "#/";
+          const match = this.match(hash);
+          const outletEl = normalizeHost(this.outlet);
+          if (!match) {
+            if (this.notFound) {
+              this.manager.mount(outletEl, {
+                url: this.notFound,
+                data: { route: { hash, params: {} } },
+                replace: true,
+                parent: null
+              });
+            }
+            return;
+          }
+          this.manager.mount(outletEl, {
+            url: match.url,
+            data: { route: match.route },
+            replace: true,
+            parent: null
+          });
+        };
+        global.addEventListener("hashchange", this._handler);
+        global.addEventListener("load", this._handler);
+        this._handler();
+      }
+      stop() {
+        if (!this._started) return;
+        this._started = false;
+        if (this._handler) {
+          global.removeEventListener("hashchange", this._handler);
+          global.removeEventListener("load", this._handler);
+        }
+        this._handler = null;
+      }
+      navigate(hash) {
+        global.location.hash = hash;
+      }
+    }
+    class Komponentor {
+      constructor(config = {}) {
+        this.config = Object.assign(
+          {
+            debug: false,
+            baseUrl: null,
+            // overlay:
+            overlayClass: "komponent-overlay",
+            overlayHtml: "<div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)'>Loading</div>",
+            // scan:
+            markerAttr: "data-komponent",
+            // error rendering:
+            errorHtml: (url, err) => `<div style="padding:8px;border:1px solid #c00;background:#fee">Failed to load <b>${url}</b></div>`
+          },
+          config
+        );
+        this._root = null;
+        this._rootCtx = null;
+        this.router = new HashRouter(this);
+        this.overlay = {
+          show: (k) => this._overlayShow(k),
+          hide: (k) => this._overlayHide(k)
+        };
+      }
+      log(...args) {
+        if (this.config.debug) console.log("[komponentor]", ...args);
+      }
+      _normalizeOpts(opts) {
+        if (typeof opts === "string") {
+          return { url: opts, data: {}, replace: false, autoload: true, overlay: true };
+        }
+        if (!isPlainObject(opts)) {
+          return { url: "", data: {}, replace: false, autoload: true, overlay: true };
+        }
+        const o = Object.assign(
+          {
+            url: "",
+            data: {},
+            replace: false,
+            autoload: true,
+            // default: scan data-komponent children after mount
+            overlay: true,
+            parent: null
+          },
+          opts
+        );
+        if (typeof o.url === "string" && o.url.includes("|")) {
+          const parsed = parseSpec(o.url);
+          o.url = parsed.url;
+          o.data = Object.assign({}, parsed.data, o.data || {});
+        }
+        return o;
+      }
+      /** Intent opts only: url + data from spec and programmatic. No DOM/dataset. urlSpecData < programmaticData. */
+      _normalizeIntentOpts(urlOrOpts) {
+        let url = "";
+        let data = {};
+        let parent = null;
+        if (typeof urlOrOpts === "string") {
+          const parsed = parseSpec(urlOrOpts);
+          url = parsed.url;
+          data = Object.assign({}, parsed.data);
+        } else if (isPlainObject(urlOrOpts)) {
+          const o = urlOrOpts;
+          url = o.url || "";
+          const fromUrl = url && url.includes("|") ? parseSpec(url).data : {};
+          data = Object.assign({}, fromUrl, o.data || {});
+          parent = o.parent != null ? o.parent : null;
+        }
+        return { url, data, parent };
+      }
+      _resolveUrl(url) {
+        if (!url) return url;
+        if (this.config.baseUrl && url[0] === "/") return this.config.baseUrl + url;
+        return url;
+      }
+      // parse HTML string into DOM fragment + init function (scoped, no global pollution)
+      _parseHtml(htmlText, komponent) {
+        const t = document.createElement("template");
+        t.innerHTML = String(htmlText);
+        const scripts = Array.from(t.content.querySelectorAll("script"));
+        const code = scripts.map((s) => s.textContent || "").join("\n");
+        scripts.forEach((s) => s.remove());
+        const fragment = t.content;
+        let init = null;
+        if (code.trim()) {
+          try {
+            const fn = new Function(
+              "komponent",
+              "data",
+              "komponentor",
+              `
+              "use strict";
+              ${code}
+              // if code declared function init_komponent, it will overwrite our local binding only if it was declared as var/let assignment.
+              // to support "function init_komponent(...) {}", we detect it via Function constructor scope:
+              return (typeof init_komponent === "function") ? init_komponent : null;
+            `
+            );
+            const maybe = fn(komponent, komponent.data, this);
+            if (typeof maybe === "function") init = maybe;
+          } catch (e) {
+            if (this.config.debug) this.log("init parse error", e);
+          }
+        }
+        return { fragment, init };
+      }
+      _renderIntoHost(komponent, fragment) {
+        const host = komponent.hostEl;
+        host.innerHTML = "";
+        host.appendChild(fragment.cloneNode(true));
+      }
+      _renderError(komponent, err) {
+        try {
+          komponent.hostEl.innerHTML = this.config.errorHtml(komponent.url, err);
+        } catch (_) {
+        }
+      }
+      _overlayShow(k) {
+        const host = k.hostEl;
+        if (!host) return;
+        if (k._overlayEl && k._overlayEl.parentNode) return;
+        const ov = document.createElement("div");
+        ov.className = this.config.overlayClass;
+        ov.innerHTML = this.config.overlayHtml;
+        ov.style.position = "relative";
+        ov.style.minHeight = "30px";
+        ov.style.border = "1px dashed silver";
+        ov.style.background = "#eee";
+        ov.style.zIndex = "999999";
+        k._overlayEl = ov;
+        host.insertBefore(ov, host.firstChild);
+      }
+      _overlayHide(k) {
+        const ov = k._overlayEl;
+        if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+        k._overlayEl = null;
+      }
+      // ---------- Public API ----------
+      root(host, urlOrOpts) {
+        const el = normalizeHost(host);
+        if (this._root) {
+          try {
+            this._root.destroy();
+          } catch (_) {
+          }
+          this._root = null;
+          this._rootCtx = null;
+        }
+        const k = this.mount(el, Object.assign({}, this._normalizeOpts(urlOrOpts), { replace: true, parent: null }));
+        this._root = k;
+        this._rootCtx = k && k.ctx ? k.ctx : null;
+        return k;
+      }
+      mount(host, urlOrOpts) {
+        const el = normalizeHost(host);
+        const opts = this._normalizeOpts(urlOrOpts);
+        const existing = getInst(el);
+        if (existing && existing instanceof Komponent && opts.replace) existing.destroy();
+        if (existing && !opts.replace) return existing;
+        const k = new Komponent(this, el, opts);
+        k.mount();
+        return k;
+      }
+      scan(container = document.body, { parent = null, replaceExisting = false } = {}) {
+        const root = normalizeHost(container);
+        const attr = this.config.markerAttr;
+        const nodes = Array.from(root.querySelectorAll(`[${attr}]`));
+        for (const node of nodes) {
+          const spec = node.getAttribute(attr) || "";
+          const parsed = parseSpec(spec);
+          const dataFromAttrs = getDataAttributesFromElement(node, attr);
+          const data = Object.assign({}, parsed.data, dataFromAttrs);
+          const existing = getInst(node);
+          if (existing && !replaceExisting) continue;
+          if (existing && replaceExisting) {
+            try {
+              existing.destroy();
+            } catch (_) {
+            }
+          }
+          this.mount(node, {
+            url: parsed.url,
+            data,
+            parent,
+            replace: true
+          });
+        }
+      }
+      route({ outlet = "#app", routes = {}, notFound = null } = {}) {
+        this.router.configure({ outlet, routes, notFound }).start();
+      }
+      navigate(hash) {
+        this.router.navigate(hash);
+      }
+      /** Fluent intent builder. .data(objOrKey, val).send({ parent }) -> Intent (after run). */
+      intent(urlOrOpts) {
+        const manager = this;
+        const opts = manager._normalizeIntentOpts(urlOrOpts);
+        let _url = opts.url;
+        let _data = Object.assign({}, opts.data);
+        return {
+          data(objOrKey, val) {
+            console.log("data", objOrKey, val);
+            if (objOrKey != null && typeof objOrKey === "object") {
+              console.log("objOrKey", objOrKey);
+              Object.assign(_data, objOrKey);
+            } else if (objOrKey != null) {
+              _data[objOrKey] = val;
+            }
+            return this;
+          },
+          async send({ parent } = {}) {
+            const intent = new Intent(manager, { url: _url, data: _data, parent });
+            await intent.run();
+            return intent;
+          }
+        };
+      }
+      /** Convenience: runIntent(url, data, { parent }) -> Intent (after run). */
+      async runIntent(url, data, { parent } = {}) {
+        const opts = this._normalizeIntentOpts({ url, data });
+        const intent = new Intent(this, { url: opts.url, data: opts.data, parent });
+        await intent.run();
+        return intent;
+      }
+    }
+    const K = global.komponentor = global.komponentor || {};
+    if (!(K instanceof Komponentor)) {
+      const inst = new Komponentor(K && isPlainObject(K) ? K : {});
+      global.komponentor = inst;
+    }
+    global.komponentor.Komponentor = Komponentor;
+    global.komponentor.Komponent = Komponent;
+    global.komponentor.Context = Context;
+    global.komponentor.HashRouter = HashRouter;
+    global.komponentor.Intent = Intent;
+  })(window);
+})();
+//# sourceMappingURL=komponentor.js.map

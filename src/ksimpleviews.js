@@ -1,5 +1,5 @@
 /**
- * KViews - KModel + KView with template rendering.
+ * KSimpleViews - KModel + KView with template rendering.
  * Requires: jQuery.
  * Optional: Handlebars (window.Handlebars) for full syntax; otherwise uses built-in {{key}} / {{key.sub}} fallback.
  * No Komponentor dependency.
@@ -8,7 +8,7 @@
     "use strict";
 
     if (!$ || typeof $.fn !== "object") {
-        throw new Error("kviews requires jQuery");
+        throw new Error("KSimpleViews requires jQuery");
     }
 
     const Handlebars = root.Handlebars;
