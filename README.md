@@ -96,6 +96,10 @@ Output: `dist/<name>.js` and `dist/<name>.min.js` for each `src/<name>.js`. Use 
 
 Example pages are in **docs/examples/**.
 
+## Author
+
+**Sergiu Voicu** · [Logimaxx Systems SRL](https://logimaxx.ro)
+
 ## License
 
 MIT (see [LICENSE](LICENSE)).

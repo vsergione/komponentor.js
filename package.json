@@ -7,7 +7,7 @@
     "build": "node build.mjs",
     "watch": "node build.mjs --watch"
   },
-  "author": "",
+  "author": "Sergiu Voicu (Logimaxx Systems SRL) https://logimaxx.ro",
   "license": "MIT",
   "repository": {
     "type": "git",
