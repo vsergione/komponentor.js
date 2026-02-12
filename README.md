@@ -6,6 +6,7 @@ A lightweight JavaScript framework for building modular web applications with HT
 
 - **Components** - Load HTML by URL into a host element; optional `init_komponent(komponent, data)` script; no build step.
 - **Component tree** - Parent/child hierarchy with cascade destroy.
+- **Replace host** - Option `replaceHost: true` to replace the host element with the component root (host removed; `id` copied for selectors).
 - **Scan** - Auto-mount components from `data-komponent="url|key=val"` markers in the DOM.
 - **Hash router** - Map hash paths to components; mount in an outlet with route params.
 - **Intents** - Headless "components" (no DOM node): load HTML, run init, optionally attach UI via the manager; can be part of the tree (destroy with parent).
@@ -68,7 +69,7 @@ komponentor.navigate("#/about");
 | Method | Description |
 |--------|-------------|
 | `komponentor.root(host, urlOrOpts)` | Set app root; replace previous root. |
-| `komponentor.mount(host, urlOrOpts)` | Mount a component on `host`. |
+| `komponentor.mount(host, urlOrOpts)` | Mount a component on `host`. Options include `replaceHost: true` (replace host with component root). |
 | `komponentor.scan(container?, { parent?, replaceExisting? })` | Mount all `[data-komponent]` in `container`. |
 | `komponentor.route({ outlet, routes, notFound })` | Configure and start hash router. |
 | `komponentor.navigate(hash)` | Set `location.hash`. |

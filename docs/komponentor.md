@@ -32,7 +32,7 @@ komponentor.config.markerAttr = "data-komponent";
 komponentor.config.overlayClass = "komponent-overlay";
 komponentor.config.overlayHtml = "<div>Loading</div>";
 komponentor.config.errorHtml = (url, err) => `<div>Failed: ${url}</div>`;
-komponentor.config.fetchOptions = {};  // passed to fetch()
+komponentor.config.fetchOptions = {};  // optional; passed to fetch() for component and intent requests
 ```
 
 ---
@@ -68,7 +68,8 @@ Declare child components in HTML:
 ### Implications of `replaceHost: true`
 
 - **Default (`replaceHost: false`):** The host element stays; its `innerHTML` is cleared and the component content is appended inside it. On destroy, only the host’s contents are cleared; the host remains.
-- **With `replaceHost: true`:** The host node is **removed** and the component’s root (first element from the template, or a wrapper if the template has 0 or multiple top-level nodes) is inserted in its place. The component’s `hostEl` is updated to this new root, and the instance is re-attached to it (`KEY_INST`). The host’s **`id`** is copied to the new root so selectors like `#app` still resolve (e.g. for the router outlet).
+- **With `replaceHost: true`:** The host node is **removed** and the component’s root is inserted in its place. The root is chosen as: the template’s **first element** if there is exactly one top-level element (text nodes are ignored); otherwise an empty `<div>` (no elements) or a wrapper `<div>` (multiple top-level elements). The component’s `hostEl` is updated to this new root, and the instance is re-attached to it (`KEY_INST`). The host’s **`id`** is copied to the new root so selectors like `#app` still resolve (e.g. for the router outlet).
+- **Fallback:** If the host has no parent when rendering (e.g. already removed from the DOM), the implementation falls back to the default append behavior and does not replace. With `config.debug === true`, a log message is emitted.
 - **Destroy:** With replace-host, `destroy()` **removes** the component root from the DOM and clears the instance reference. With default behavior, destroy only clears `hostEl.innerHTML`.
 - **remount():** With replace-host, after `destroy()` the previous root is no longer in the document. `remount()` then calls `mount(this.hostEl, ...)` on that detached node, so the new component’s content is not in the document. Prefer creating a new host and calling `mount(host, urlOrOpts)` yourself when using replace-host and needing to “remount”.
 - **Router:** Using `replaceHost: true` on the root/outlet (e.g. `root("#app", "app.html", { replaceHost: true })`) is fine: the new root keeps the host’s `id`, so the outlet selector `#app` still works for the next route change.

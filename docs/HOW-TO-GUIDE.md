@@ -1,6 +1,6 @@
 # How to Use Komponentor (Single-File)
 
-A practical guide for **`src2/komponentor.js`**: the single-file, jQuery-optional framework for HTML-based components, a component tree, and hash routing.
+A practical guide for **`src/komponentor.js`**: the single-file, jQuery-optional framework for HTML-based components, a component tree, and hash routing.
 
 ---
 
@@ -18,7 +18,7 @@ A practical guide for **`src2/komponentor.js`**: the single-file, jQuery-optiona
 | Method | Description |
 |--------|-------------|
 | `komponentor.root(host, urlOrOpts)` | Set app root: mount one component, replace previous root. |
-| `komponentor.mount(host, urlOrOpts)` | Mount a component on `host` (load HTML from URL, render, optional init). |
+| `komponentor.mount(host, urlOrOpts)` | Mount a component on `host` (load HTML from URL, render, optional init). Options: `replaceHost: true` to replace host with component root. |
 | `komponentor.scan(container?, { parent?, replaceExisting? })` | Find all `[data-komponent]` in `container` and mount each. |
 | `komponentor.route({ outlet, routes, notFound })` | Configure and start hash router. |
 | `komponentor.navigate(hash)` | Set `location.hash` (triggers route). |
@@ -77,6 +77,7 @@ komponentor.mount("#app", {
   url: "components/panel.html",
   data: { title: "Hello", id: 42 },
   replace: true,
+  replaceHost: false,  // set true to replace the host element with the component root (see docs/komponentor.md)
   autoload: true,
   overlay: true,
 });
@@ -105,6 +106,10 @@ komponentor.root("#app", "components/main.html");
 ```
 
 This stores the component as the “root”; you can use `emitRoot()` from any child context to send events to the root (see Advanced).
+
+### 3.2a Replace host option
+
+Use **`replaceHost: true`** in mount options to **replace** the host element with the component’s root (the host is removed from the DOM; the component’s first top-level element takes its place). The host’s `id` is copied to the new root so selectors (e.g. `#app` for the router outlet) still work. On destroy, the component root is removed from the DOM. See **docs/komponentor.md** for full implications (remount, router, fallback when host has no parent).
 
 ### 3.3 Component HTML and init
 
@@ -407,6 +412,7 @@ function init_komponent(komponent, data) {
     url: "components/widget.html",
     data: { source: data.source },
     parent: komponent,
+    replaceHost: false,  // optional: true to replace placeholder with component root
   });
 }
 ```

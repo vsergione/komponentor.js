@@ -107,7 +107,8 @@ Use **`model.bindView(view)`** (not the other way around). It adds the view to t
 
 ```javascript
 const model = new KModel({ name: "Jane" });
-const view = new KView(document.querySelector("#form"), k);  // k = komponent for cleanup
+// lifecycle: object with onDestroy(fn), e.g. k.ctx when used with Komponentor
+const view = new KView(document.querySelector("#form"), lifecycle);
 model.bindView(view);
 ```
 
