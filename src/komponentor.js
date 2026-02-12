@@ -55,6 +55,7 @@
     }
   
     function normalizeHost(host) {
+     
       if (!host) throw new Error("Invalid host");
       if (typeof host === "string") {
         const el = document.querySelector(host);
@@ -485,11 +486,11 @@
         if (this.ctx._destroyed) return this;
         if (!this.url) {
           this.ctx.state = "error";
-          if (this.manager.config.debug) this.manager.log("intent run: no url");
+          this.manager.log("intent run: no url");
           return this;
         }
         this.ctx.state = "loading";
-        if (this.manager.config.debug) this.manager.log("intent run", this.url);
+        this.manager.log("intent run", this.url);
 
         try {
           const url = this.manager._resolveUrl(this.url);
@@ -842,7 +843,9 @@
   
       // ---------- Public API ----------
       root(host, urlOrOpts) {
+        console.log("root", host);
         const el = normalizeHost(host);
+        console.log("el", el);
         // destroy existing root if any
         if (this._root) {
           try {
@@ -923,9 +926,7 @@
         let _data = Object.assign({}, opts.data);
         return {
           data(objOrKey, val) {
-            console.log("data",objOrKey, val);
             if (objOrKey != null && typeof objOrKey === "object") {
-              console.log("objOrKey",objOrKey);
               Object.assign(_data, objOrKey);
             } else if (objOrKey != null) {
               _data[objOrKey] = val;

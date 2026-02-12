@@ -1,6 +1,6 @@
 /*! komponentor v1.0.0
  * A jQuery plugin to create modular web apps
- * (c) 2026
+ * (c) 2026 Sergiu Voicu (Logimaxx Systems SRL) https://logimaxx.ro
  * Released under the MIT License
  */
 
@@ -20,6 +20,8 @@
    *   komponentor.navigate(hash)
    *   komponentor.intent(urlOrOpts)  -> fluent .data(...).send({ parent })
    *   komponentor.runIntent(url, data, { parent })
+   *
+   * Mount option: replaceHost: true — replace the host element with the component root (host is removed; id is copied so e.g. #app still works). Destroy then removes the new root from DOM. remount() mounts onto the detached node unless you pass a new host.
    *
    * Component marker:
    *   <div data-komponent="/path/to/component.html|id=5|foo=bar"></div>
@@ -343,7 +345,12 @@
         } catch (_) {
         }
         try {
-          this.hostEl.innerHTML = "";
+          if (this.opts.replaceHost) {
+            if (this.hostEl.parentNode) this.hostEl.parentNode.removeChild(this.hostEl);
+            clearInst(this.hostEl, this);
+          } else {
+            this.hostEl.innerHTML = "";
+          }
         } catch (_) {
         }
         if (this.parent && this.parent.children) {
@@ -372,11 +379,11 @@
         if (this.ctx._destroyed) return this;
         if (!this.url) {
           this.ctx.state = "error";
-          if (this.manager.config.debug) this.manager.log("intent run: no url");
+          this.manager.log("intent run: no url");
           return this;
         }
         this.ctx.state = "loading";
-        if (this.manager.config.debug) this.manager.log("intent run", this.url);
+        this.manager.log("intent run", this.url);
         try {
           const url = this.manager._resolveUrl(this.url);
           const htmlText = await this.ctx.requestText(url, this.manager.config.fetchOptions || {});
@@ -542,6 +549,8 @@
             url: "",
             data: {},
             replace: false,
+            replaceHost: false,
+            // if true, replace the host element with the component root (see docs)
             autoload: true,
             // default: scan data-komponent children after mount
             overlay: true,
@@ -612,8 +621,35 @@
       }
       _renderIntoHost(komponent, fragment) {
         const host = komponent.hostEl;
-        host.innerHTML = "";
-        host.appendChild(fragment.cloneNode(true));
+        if (komponent.opts.replaceHost) {
+          const parent = host.parentNode;
+          if (!parent) {
+            if (this.config.debug) this.log("replaceHost: host has no parent, falling back to append");
+            host.innerHTML = "";
+            host.appendChild(fragment.cloneNode(true));
+            return;
+          }
+          const clone = fragment.cloneNode(true);
+          const childElements = clone.children ? Array.from(clone.children) : [];
+          let newRoot;
+          if (childElements.length === 1) {
+            newRoot = childElements[0];
+          } else if (childElements.length === 0) {
+            newRoot = document.createElement("div");
+          } else {
+            newRoot = document.createElement("div");
+            while (clone.firstChild) newRoot.appendChild(clone.firstChild);
+          }
+          if (host.id) newRoot.id = host.id;
+          parent.replaceChild(newRoot, host);
+          clearInst(host, komponent);
+          setInst(newRoot, komponent);
+          komponent.hostEl = newRoot;
+          if (komponent.$host) komponent.$host = $ ? $(newRoot) : null;
+        } else {
+          host.innerHTML = "";
+          host.appendChild(fragment.cloneNode(true));
+        }
       }
       _renderError(komponent, err) {
         try {
@@ -643,7 +679,9 @@
       }
       // ---------- Public API ----------
       root(host, urlOrOpts) {
+        console.log("root", host);
         const el = normalizeHost(host);
+        console.log("el", el);
         if (this._root) {
           try {
             this._root.destroy();
@@ -706,9 +744,7 @@
         let _data = Object.assign({}, opts.data);
         return {
           data(objOrKey, val) {
-            console.log("data", objOrKey, val);
             if (objOrKey != null && typeof objOrKey === "object") {
-              console.log("objOrKey", objOrKey);
               Object.assign(_data, objOrKey);
             } else if (objOrKey != null) {
               _data[objOrKey] = val;

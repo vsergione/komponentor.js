@@ -1,6 +1,6 @@
 /*! komponentor v1.0.0
  * A jQuery plugin to create modular web apps
- * (c) 2026
+ * (c) 2026 Sergiu Voicu (Logimaxx Systems SRL) https://logimaxx.ro
  * Released under the MIT License
  */
 
